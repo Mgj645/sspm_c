@@ -2,13 +2,17 @@
 #include <errno.h>
 
 typedef struct ms_ecall_encLOG_t {
-	uint8_t* ms_buffer;
+	char* ms_buffer;
 	size_t ms_len;
 } ms_ecall_encLOG_t;
 
 typedef struct ms_ocall_print_string_t {
 	char* ms_str;
 } ms_ocall_print_string_t;
+
+typedef struct ms_ocall_save_dbpw_t {
+	char* ms_str;
+} ms_ocall_save_dbpw_t;
 
 typedef struct ms_sgx_oc_cpuidex_t {
 	int* ms_cpuinfo;
@@ -42,6 +46,14 @@ static sgx_status_t SGX_CDECL Enclave_ocall_print_string(void* pms)
 {
 	ms_ocall_print_string_t* ms = SGX_CAST(ms_ocall_print_string_t*, pms);
 	ocall_print_string((const char*)ms->ms_str);
+
+	return SGX_SUCCESS;
+}
+
+static sgx_status_t SGX_CDECL Enclave_ocall_save_dbpw(void* pms)
+{
+	ms_ocall_save_dbpw_t* ms = SGX_CAST(ms_ocall_save_dbpw_t*, pms);
+	ocall_save_dbpw((const char*)ms->ms_str);
 
 	return SGX_SUCCESS;
 }
@@ -88,11 +100,12 @@ static sgx_status_t SGX_CDECL Enclave_sgx_thread_set_multiple_untrusted_events_o
 
 static const struct {
 	size_t nr_ocall;
-	void * table[6];
+	void * table[7];
 } ocall_table_Enclave = {
-	6,
+	7,
 	{
 		(void*)Enclave_ocall_print_string,
+		(void*)Enclave_ocall_save_dbpw,
 		(void*)Enclave_sgx_oc_cpuidex,
 		(void*)Enclave_sgx_thread_wait_untrusted_event_ocall,
 		(void*)Enclave_sgx_thread_set_untrusted_event_ocall,
@@ -107,7 +120,7 @@ sgx_status_t ecall_init(sgx_enclave_id_t eid)
 	return status;
 }
 
-sgx_status_t ecall_encLOG(sgx_enclave_id_t eid, uint8_t* buffer, size_t len)
+sgx_status_t ecall_encLOG(sgx_enclave_id_t eid, char* buffer, size_t len)
 {
 	sgx_status_t status;
 	ms_ecall_encLOG_t ms;

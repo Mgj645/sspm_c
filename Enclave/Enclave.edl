@@ -10,7 +10,7 @@ enclave {
 
     trusted {
     		public void ecall_init();
-    		public void ecall_encLOG([in, size=len] uint8_t* buffer, size_t len);
+    		public void ecall_encLOG([in, size=len] char* buffer, size_t len);
 
         };
 
@@ -21,6 +21,7 @@ enclave {
      */
     untrusted {
         void ocall_print_string([in, string] const char *str);
+        void ocall_save_dbpw([in, string] const char *str);
     };
 
 };

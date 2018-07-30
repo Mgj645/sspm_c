@@ -46,9 +46,9 @@
 #include <string.h>
 #include <thread>
 #include <mutex>
-#include <openssl/conf.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
+#include <sodium.h>
+#include <fstream>
+
 # define MAX_PATH FILENAME_MAX
 
 #include "sgx_urts.h"
@@ -61,7 +61,7 @@ using namespace std;
 /*                      *
  *                      *
  *                      *
- *     INTEL SGX PART       *
+ *    INTEL SGX PART    *
  *                      *
  *                      *
  * */
@@ -254,6 +254,12 @@ void ocall_print_string(const char *str)
      */
     printf("%s", str);
 }
+void ocall_save_dbpw(const char * str) {
+    ofstream myfile;
+    myfile.open("DBPW.txt");
+    myfile << str;
+    myfile.close();
+}
 
 /*                      *
  *                      *
@@ -279,99 +285,24 @@ mutex logTEX;
 const int dumpTIME = 3;
 int VC;
 int no;
-void handleErrors(void)
-{
-    ERR_print_errors_fp(stderr);
-    abort();
-}
-int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
-            unsigned char *iv, unsigned char *plaintext)
-{
-    EVP_CIPHER_CTX *ctx;
-    int len;
-    int plaintext_len;
+unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
+unsigned char nonce[crypto_secretbox_NONCEBYTES];
 
-    /* Create and initialise the context */
-    if(!(ctx = EVP_CIPHER_CTX_new())) handleErrors();
-
-    if(1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
-        handleErrors();
-
-    if(1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
-        handleErrors();
-    plaintext_len = len;
-
-    if(1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len)) handleErrors();
-    plaintext_len += len;
-
-    /* Clean up */
-    EVP_CIPHER_CTX_free(ctx);
-
-    return plaintext_len;
-}
-
-int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key,
-            unsigned char *iv, unsigned char *ciphertext)
-{
-    EVP_CIPHER_CTX *ctx;
-
-    int len;
-
-    int ciphertext_len;
-
-    /* Create and initialise the context */
-    if(!(ctx = EVP_CIPHER_CTX_new())) handleErrors();
-
-    if(1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
-        handleErrors();
-
-    if(1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
-        handleErrors();
-    ciphertext_len = len;
-
-    if(1 != EVP_EncryptFinal_ex(ctx, ciphertext + len, &len)) handleErrors();
-    ciphertext_len += len;
-
-    /* Clean up */
-    EVP_CIPHER_CTX_free(ctx);
-
-    return ciphertext_len;
-}
-void testAES(unsigned char * plaintext){
-
-    /* A 256 bit key */
-    unsigned char *key = static_cast<unsigned char *>(malloc(32));
-    for(int i = 0; i < 32; i ++)
-        key[i] = (char) rand()%128;
-
-    /* A 128 bit IV */
-    unsigned char *iv = static_cast<unsigned char *>(malloc(16));
-    for(int i = 0; i < 16; i ++)
-        key[i] = (char) rand()%128;
-    unsigned char ciphertext[no];
-
-    /* Buffer for the decrypted text **/
-    unsigned char decryptedtext[no];
-    int decryptedtext_len, ciphertext_len;
-
-    /* Encrypt the plaintext */
-    ciphertext_len = encrypt (plaintext, strlen ((char *)plaintext), key, iv,
-                              ciphertext);
-
-    /* Decrypt the ciphertext */
-    decryptedtext_len = decrypt(ciphertext, ciphertext_len, key, iv,
-                                decryptedtext);
-
-    /* Add a NULL terminator. We are expecting printable text */
-    decryptedtext[decryptedtext_len] = '\0';
-}
 string applyFunction(string username, string password){
-    string c = "";
+    string c, result = "";
     c.append(username);
     c.append(sep);
     c.append(password);
-
-    return c;
+    int len = c.size();
+    unsigned char out[len];
+    unsigned char in[len];
+    unsigned long long in_len = len;
+    for(int i = 0; i < len; i ++ )
+        in[i] = (unsigned char) c.at(i);
+    crypto_auth_hmacsha256(out, in, in_len,key_);
+    for(int i = 0; i < in_len ; i++)
+        result+=out[i];
+    return result;
 }
 
 bool RegisterV0(string username, string password){
@@ -531,7 +462,7 @@ bool deleteUserV2(string username, string password){
     }
 }
 
-uint8_t* VVStoByteA(vector<vector<string>> m){
+char * VVStoByteA(vector<vector<string>> m){
     int countBytes = 0;
     for( int i = 0; i < m.size(); i++ ) {
             int n = m[i][0].at(0); //check how many strings does a entry have
@@ -545,22 +476,22 @@ uint8_t* VVStoByteA(vector<vector<string>> m){
         }
         no = countBytes;
 
-    uint8_t *result = static_cast<uint8_t *>(malloc(countBytes + 1));
+    char *result = static_cast<char *>(malloc(countBytes + 1));
     int counter = 0;
 
     for( int i = 0; i < m.size(); i++ ) {
         int n = m[i][0].at(0); //check how many strings does a entry have
         result[counter++] = n; result[counter++] = '^';
             for(int j = 0; j < m[i][1].size() ; j ++)
-                result[counter++] = (uint8_t) m[i][1].at(j);
+                result[counter++] = m[i][1].at(j);
             result[counter++] = '^';
             for(int j = 0; j < m[i][2].size() ; j ++)
-                result[counter++] = (uint8_t) m[i][2].at(j);
+                result[counter++] = m[i][2].at(j);
                 result[counter++] = '^';
             if( n  == 1 || n == 2) {
                 string p_ = m[i][3];
                 for(int j = 0; j < p_.size() ; j ++)
-                    result[counter++] = (uint8_t) p_.at(j);
+                    result[counter++] = p_.at(j);
             }
         result[counter++] = '~';
     }
@@ -569,7 +500,7 @@ uint8_t* VVStoByteA(vector<vector<string>> m){
     return result;
 }
 
-vector<vector<string>> ByteAtoVAA( uint8_t* byteA){
+vector<vector<string>> ByteAtoVAA( char* byteA){
     vector<vector<string>> result;
     int i = 0;
     while(byteA[i] != ' ') {
@@ -579,18 +510,18 @@ vector<vector<string>> ByteAtoVAA( uint8_t* byteA){
         i+=2;
         string a = "";
         for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += (char) byteA[j];
+            a += byteA[j];
 
         toAdd.push_back(a); i++;
         a = "";
         for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += (char) byteA[j];
+            a += byteA[j];
 
         toAdd.push_back(a); i++;
         a= "";
         if(op == '1' || op == '2') {
             for (int j = i; byteA[j] != '~'; j++, i++)
-                a += (char) byteA[j];
+                a += byteA[j];
             toAdd.push_back(a); i++;
         }
         i++;
@@ -600,31 +531,29 @@ vector<vector<string>> ByteAtoVAA( uint8_t* byteA){
 }
 
 
-uint8_t* MAPtoByteA(map<string, string> m){
-
+char* MAPtoByteA(map<string, string> m){
     int countBytes = 0;
     for( const auto& sm_pair : m ) {
         string entry =  sm_pair.first;
         string value = sm_pair.second;
         countBytes += entry.size() + value.size() + 2;
     }
-    uint8_t *result = static_cast<uint8_t *>(malloc(countBytes + 1));
-
+    char *result = static_cast<char *>(malloc(countBytes + 1));
 
     int counter = 0;
     for( const auto& sm_pair : m ){
         string entry =  sm_pair.first;
         string value = sm_pair.second;
         const int totalSize = entry.size() + value.size() + 2;
-        uint8_t *baites = static_cast<uint8_t *>(malloc(totalSize));
+        char *baites = static_cast<char *>(malloc(totalSize));
         for(int i = 0; i < entry.size() ; i ++)
-            baites[i] = (uint8_t) entry.at(i);
+            baites[i] = entry.at(i);
 
         baites[entry.size()] = '^';
 
         int j = 0;
         for(int i = entry.size() + 1 ; i < entry.size()+ 1 + value.size() ; i ++)
-            baites[i] = (uint8_t) value.at(j++);
+            baites[i] = value.at(j++);
 
         baites[ entry.size()+ 1 + value.size()] = '~';
 
@@ -639,19 +568,19 @@ uint8_t* MAPtoByteA(map<string, string> m){
     return result;
 }
 
-map<string, string> ByteAtoMAP( uint8_t* byteA){
+map<string, string> ByteAtoMAP( char* byteA){
     map<string, string> result;
     string a= "";
     string b = "";
     bool aChecked = 0;
 
     for(int i = 0 ; byteA[i] != ' '; i++){
-        uint8_t now = byteA[i];
+        char now = byteA[i];
         if(!aChecked)
             if (now == '^')
                 aChecked = 1;
             else
-                a += (char) now;
+                a += now;
         else
 
         if (now == '~') {
@@ -660,7 +589,7 @@ map<string, string> ByteAtoMAP( uint8_t* byteA){
             a = ""; b = "";
         }
         else
-            b += (char) now;
+            b += now;
 
     }
     return result;
@@ -672,9 +601,9 @@ void dumpLog() {
     //DBPW = CipheredDB.deciphered
 
     while(2+2==4) {
-        sleep(dumpTIME);
+        //sleep(dumpTIME);
         if(logV2.size() > 0) {
-            uint8_t *caites = VVStoByteA(logV2);
+            char *caites = VVStoByteA(logV2);
             sgx_status_t ret = SGX_ERROR_UNEXPECTED;
             ret = ecall_encLOG(global_eid, caites, no);
             if (ret != SGX_SUCCESS) {
@@ -742,8 +671,6 @@ bool Login(string username, string password) {
 }
 
 bool Register(string username, string password){
-    printf("register\n");
-
     switch(VC){
         case 0 : return RegisterV0(username, password); break;
         case 1 : return RegisterV1(username, password); break;
