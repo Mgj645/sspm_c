@@ -6,6 +6,12 @@ typedef struct ms_ecall_encLOG_t {
 	size_t ms_len;
 } ms_ecall_encLOG_t;
 
+typedef struct ms_ecall_hmac_this_t {
+	char* ms_retval;
+	char* ms_buffer;
+	size_t ms_len;
+} ms_ecall_hmac_this_t;
+
 typedef struct ms_ocall_print_string_t {
 	char* ms_str;
 } ms_ocall_print_string_t;
@@ -13,6 +19,10 @@ typedef struct ms_ocall_print_string_t {
 typedef struct ms_ocall_save_dbpw_t {
 	char* ms_str;
 } ms_ocall_save_dbpw_t;
+
+typedef struct ms_ocall_save_users_t {
+	char* ms_str;
+} ms_ocall_save_users_t;
 
 typedef struct ms_sgx_oc_cpuidex_t {
 	int* ms_cpuinfo;
@@ -54,6 +64,14 @@ static sgx_status_t SGX_CDECL Enclave_ocall_save_dbpw(void* pms)
 {
 	ms_ocall_save_dbpw_t* ms = SGX_CAST(ms_ocall_save_dbpw_t*, pms);
 	ocall_save_dbpw((const char*)ms->ms_str);
+
+	return SGX_SUCCESS;
+}
+
+static sgx_status_t SGX_CDECL Enclave_ocall_save_users(void* pms)
+{
+	ms_ocall_save_users_t* ms = SGX_CAST(ms_ocall_save_users_t*, pms);
+	ocall_save_users((const char*)ms->ms_str);
 
 	return SGX_SUCCESS;
 }
@@ -100,12 +118,13 @@ static sgx_status_t SGX_CDECL Enclave_sgx_thread_set_multiple_untrusted_events_o
 
 static const struct {
 	size_t nr_ocall;
-	void * table[7];
+	void * table[8];
 } ocall_table_Enclave = {
-	7,
+	8,
 	{
 		(void*)Enclave_ocall_print_string,
 		(void*)Enclave_ocall_save_dbpw,
+		(void*)Enclave_ocall_save_users,
 		(void*)Enclave_sgx_oc_cpuidex,
 		(void*)Enclave_sgx_thread_wait_untrusted_event_ocall,
 		(void*)Enclave_sgx_thread_set_untrusted_event_ocall,
@@ -127,6 +146,24 @@ sgx_status_t ecall_encLOG(sgx_enclave_id_t eid, char* buffer, size_t len)
 	ms.ms_buffer = buffer;
 	ms.ms_len = len;
 	status = sgx_ecall(eid, 1, &ocall_table_Enclave, &ms);
+	return status;
+}
+
+sgx_status_t ecall_newHMAC(sgx_enclave_id_t eid)
+{
+	sgx_status_t status;
+	status = sgx_ecall(eid, 2, &ocall_table_Enclave, NULL);
+	return status;
+}
+
+sgx_status_t ecall_hmac_this(sgx_enclave_id_t eid, char** retval, char* buffer, size_t len)
+{
+	sgx_status_t status;
+	ms_ecall_hmac_this_t ms;
+	ms.ms_buffer = buffer;
+	ms.ms_len = len;
+	status = sgx_ecall(eid, 3, &ocall_table_Enclave, &ms);
+	if (status == SGX_SUCCESS && retval) *retval = ms.ms_retval;
 	return status;
 }
 
