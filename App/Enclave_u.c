@@ -1,14 +1,10 @@
 #include "Enclave_u.h"
 #include <errno.h>
 
-typedef struct ms_ecall_encLOG_t {
-	char* ms_buffer;
-	size_t ms_len;
-} ms_ecall_encLOG_t;
-
 typedef struct ms_ecall_hmac_this_t {
 	char* ms_retval;
-	char* ms_buffer;
+	int ms_code;
+	char* ms_u;
 	size_t ms_len;
 } ms_ecall_hmac_this_t;
 
@@ -139,13 +135,10 @@ sgx_status_t ecall_init(sgx_enclave_id_t eid)
 	return status;
 }
 
-sgx_status_t ecall_encLOG(sgx_enclave_id_t eid, char* buffer, size_t len)
+sgx_status_t ecall_encLOG(sgx_enclave_id_t eid)
 {
 	sgx_status_t status;
-	ms_ecall_encLOG_t ms;
-	ms.ms_buffer = buffer;
-	ms.ms_len = len;
-	status = sgx_ecall(eid, 1, &ocall_table_Enclave, &ms);
+	status = sgx_ecall(eid, 1, &ocall_table_Enclave, NULL);
 	return status;
 }
 
@@ -156,11 +149,12 @@ sgx_status_t ecall_newHMAC(sgx_enclave_id_t eid)
 	return status;
 }
 
-sgx_status_t ecall_hmac_this(sgx_enclave_id_t eid, char** retval, char* buffer, size_t len)
+sgx_status_t ecall_hmac_this(sgx_enclave_id_t eid, char** retval, int code, char* u, size_t len)
 {
 	sgx_status_t status;
 	ms_ecall_hmac_this_t ms;
-	ms.ms_buffer = buffer;
+	ms.ms_code = code;
+	ms.ms_u = u;
 	ms.ms_len = len;
 	status = sgx_ecall(eid, 3, &ocall_table_Enclave, &ms);
 	if (status == SGX_SUCCESS && retval) *retval = ms.ms_retval;

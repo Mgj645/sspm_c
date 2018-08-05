@@ -61,16 +61,15 @@ using namespace std;
 unordered_set<string> users;
 unordered_set<string> usernames;
 
-string sep;
 string sha1_key(8, '\0');
 vector<vector<string>> logV2;
 mutex logTEX;
 const int dumpTIME = 3;
 int VC;
-int no;
 unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
-char * encDBPW;
+string sep;
+int no;
 
 /*                      *
  *                      *
@@ -268,6 +267,9 @@ void ocall_print_string(const char *str)
      */
     printf("%s", str);
 }
+
+char * encDBPW;
+
 void ocall_save_dbpw(const char * str) {
     encDBPW = const_cast<char *>(str);
     ofstream myfile;
@@ -280,15 +282,21 @@ void ocall_save_users(const char * users_) {
     users.clear();
     string r = "";
     int i = 0;
+    cout << "new key bitches: " << endl;
     while(users_[i] != '\0'){
         if(users_[i] == '~') {
             users.insert(r);
+            cout << r << endl;
+
             r="";
         }
         else{
             r+=users_[i];}
         i++;
     }
+    cout << "done" << endl;
+
+
 }
 
 /*                      *
@@ -300,22 +308,23 @@ void ocall_save_users(const char * users_) {
  * */
 
 //
-// Created by miguel on 17-07-2018.
+// Created by miguel on 17-07-.2018
 //
 
 
-char * check_hmac_sgx(string username, string password){
-    int len = username.length() + password.length() + sep.length() ;
+char * check_hmac_sgx(int code, string username, string password){
+
+    int len = username.length() + password.length() + sep.length();
     string a; a.append(username); a.append(sep); a.append(password);
-    char * send = const_cast<char *>((a).c_str());
+
     char ** result = static_cast<char **>(malloc(len));
-    ecall_hmac_this(global_eid, result, send, len);
+    ecall_hmac_this(global_eid, result, code, const_cast<char *>(a.c_str()), len);
     return *result;
 }
 
 bool RegisterV0(string username, string password){
-    if (users.find(check_hmac_sgx(username, password)) == users.end()){
-        users.insert(check_hmac_sgx(username, password));
+    if (users.find(check_hmac_sgx(0, username, password)) == users.end()){
+        users.insert(check_hmac_sgx(1, username, password));
         return true;
     }
     else{
@@ -324,33 +333,33 @@ bool RegisterV0(string username, string password){
 }
 
 bool changePasswordV0(string username, string password1, string password2){
-    if (users.find(check_hmac_sgx(username, password1)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password1)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password1));
-        users.insert(check_hmac_sgx(username, password2));
+        users.erase(check_hmac_sgx(2, username, password1));
+        users.insert(check_hmac_sgx(1, username, password2));
         return true;
     }
 }
 
 bool changeUsernameV0(string username1, string password, string username2){
-    if (users.find(check_hmac_sgx(username1, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username1, password)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username1, password));
-        users.insert(check_hmac_sgx(username2, password));
+        users.erase(check_hmac_sgx(2, username1, password));
+        users.insert(check_hmac_sgx(1, username2, password));
         return true;
     }
 }
 
 bool deleteUserV0(string username, string password){
-    if (users.find(check_hmac_sgx(username, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password));
+        users.erase(check_hmac_sgx(2, username, password));
         return true;
     }
 }
@@ -358,7 +367,7 @@ bool deleteUserV0(string username, string password){
 bool RegisterV1(string username, string password){
     if (usernames.find(username) == usernames.end()){
         usernames.insert(username);
-        users.insert(check_hmac_sgx(username, password));
+        users.insert(check_hmac_sgx(1, username, password));
         return true;
     }
     else{
@@ -367,35 +376,35 @@ bool RegisterV1(string username, string password){
 }
 
 bool changePasswordV1(string username, string password1, string password2){
-    if (users.find(check_hmac_sgx(username, password1)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password1)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password1));
-        users.insert(check_hmac_sgx(username, password2));
+        users.erase(check_hmac_sgx(2, username, password1));
+        users.insert(check_hmac_sgx(1, username, password2));
         return true;
     }
 }
 
 bool changeUsernameV1(string username1, string password, string username2){
-    if (users.find(check_hmac_sgx(username1, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username1, password)) == users.end()){
         return false;
     }
     else{
         usernames.erase(username1);
         usernames.insert(username2);
-        users.erase(check_hmac_sgx(username1, password));
-        users.insert(check_hmac_sgx(username2, password));
+        users.erase(check_hmac_sgx(2, username1, password));
+        users.insert(check_hmac_sgx(1, username2, password));
         return true;
     }
 }
 
 bool deleteUserV1(string username, string password){
-    if (users.find(check_hmac_sgx(username, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password));
+        users.erase(check_hmac_sgx(2, username, password));
         usernames.erase(username);
 
         return true;
@@ -403,10 +412,9 @@ bool deleteUserV1(string username, string password){
 }
 
 bool RegisterV2(string username, string password){
-
     if (usernames.find(username) == usernames.end()){
         usernames.insert(username);
-        users.insert(check_hmac_sgx(username, password));
+        users.insert(check_hmac_sgx(1, username, password));
         vector<string> toAdd;
         toAdd.push_back("0"); toAdd.push_back(username); toAdd.push_back(password);
         logTEX.try_lock();
@@ -420,12 +428,12 @@ bool RegisterV2(string username, string password){
 }
 
 bool changePasswordV2(string username, string password1, string password2){
-    if (users.find(check_hmac_sgx(username, password1)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password1)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password1));
-        users.insert(check_hmac_sgx(username, password2));
+        users.erase(check_hmac_sgx(2, username, password1));
+        users.insert(check_hmac_sgx(1, username, password2));
 
         vector<string> toAdd;
         toAdd.push_back("1"); toAdd.push_back(username); toAdd.push_back(password1); toAdd.push_back(password2);
@@ -437,14 +445,14 @@ bool changePasswordV2(string username, string password1, string password2){
 }
 
 bool changeUsernameV2(string username1, string password, string username2){
-    if (users.find(check_hmac_sgx(username1, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username1, password)) == users.end()){
         return false;
     }
     else{
         usernames.erase(username1);
         usernames.insert(username2);
-        users.erase(check_hmac_sgx(username1, password));
-        users.insert(check_hmac_sgx(username2, password));
+        users.erase(check_hmac_sgx(2, username1, password));
+        users.insert(check_hmac_sgx(1, username2, password));
 
         vector<string> toAdd;
         toAdd.push_back("2"); toAdd.push_back(username1); toAdd.push_back(username2); toAdd.push_back(password);
@@ -456,11 +464,11 @@ bool changeUsernameV2(string username1, string password, string username2){
 }
 
 bool deleteUserV2(string username, string password){
-    if (users.find(check_hmac_sgx(username, password)) == users.end()){
+    if (users.find(check_hmac_sgx(0, username, password)) == users.end()){
         return false;
     }
     else{
-        users.erase(check_hmac_sgx(username, password));
+        users.erase(check_hmac_sgx(2, username, password));
         usernames.erase(username);
         vector<string> toAdd;
         toAdd.push_back("3"); toAdd.push_back(username); toAdd.push_back(password);
@@ -509,36 +517,6 @@ char * VVStoByteA(vector<vector<string>> m){
     return result;
 }
 
-vector<vector<string>> ByteAtoVAA( char* byteA){
-    vector<vector<string>> result;
-    int i = 0;
-    while(byteA[i] != ' ') {
-        vector<string> toAdd;
-        char op = byteA [i];
-        toAdd.push_back(string(1,op));
-        i+=2;
-        string a = "";
-        for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += byteA[j];
-
-        toAdd.push_back(a); i++;
-        a = "";
-        for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += byteA[j];
-
-        toAdd.push_back(a); i++;
-        a= "";
-        if(op == '1' || op == '2') {
-            for (int j = i; byteA[j] != '~'; j++, i++)
-                a += byteA[j];
-            toAdd.push_back(a); i++;
-        }
-        i++;
-        result.push_back(toAdd);
-    }
-    return result;
-}
-
 char* MAPtoByteA(map<string, string> m){
     int countBytes = 0;
     for( const auto& sm_pair : m ) {
@@ -576,47 +554,12 @@ char* MAPtoByteA(map<string, string> m){
     return result;
 }
 
-map<string, string> ByteAtoMAP( char* byteA){
-    map<string, string> result;
-    string a= "";
-    string b = "";
-    bool aChecked = 0;
-
-    for(int i = 0 ; byteA[i] != ' '; i++){
-        char now = byteA[i];
-        if(!aChecked)
-            if (now == '^')
-                aChecked = 1;
-            else
-                a += now;
-        else
-
-        if (now == '~') {
-            aChecked = 0;
-            result.insert(pair<string, string>(a,b));
-            a = ""; b = "";
-        }
-        else
-            b += now;
-
-    }
-    return result;
-
-
-}
-
 void dumpLog() {
     while(2+2==4) {
         sleep(dumpTIME);
-        if(logV2.size() > 0) {
-            char *caites = VVStoByteA(logV2);
-            sgx_status_t ret = SGX_ERROR_UNEXPECTED;
-            printf("Sending log changes to Enclave");
-            ret = ecall_encLOG(global_eid, caites, no);
-            if (ret != SGX_SUCCESS) {
-                printf("fatal error\n");
-                // exit(1);
-            }
+        cout << "log changes" << endl;
+            ecall_encLOG(global_eid);
+
 
            // vector<vector<string>> vaites = ByteAtoVAA(caites);
             logTEX.try_lock();
@@ -625,19 +568,14 @@ void dumpLog() {
             logTEX.unlock();
 
 
-        }
-        sgx_status_t ret = SGX_ERROR_UNEXPECTED;
 
-        ret = ecall_newHMAC(global_eid);
-        if (ret != SGX_SUCCESS) {
-            printf("fatal error\n");
-            // exit(1);
-        }
+
+        ecall_newHMAC(global_eid);
+
     }
 }
 
 int sspm(const int version) {
-    sep = "%|00%";
     std::random_device rd;
     std::mt19937_64 gen{std::random_device{}()};
     std::uniform_int_distribution<short> dist{'a', 'z'};
@@ -656,8 +594,9 @@ int sspm(const int version) {
 }
 
 bool Login(string username, string password) {
-    cout << check_hmac_sgx(username, password) << endl;
-    return !(users.find(check_hmac_sgx(username, password)) == users.end());
+    char * result = check_hmac_sgx(0, username, password);
+  //cout << "APP: " << result << endl;
+    return !(users.find(result) == users.end());
 }
 
 bool Register(string username, string password){
@@ -731,12 +670,11 @@ int SGX_CDECL main(int argc, char *argv[])
 {
     sep = "%|00%";
 
+
     (void)(argc);
     (void)(argv);
     simulateUsers();
     VC = 2;
-
-
 
     char cwd[1024];
     if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -744,10 +682,6 @@ int SGX_CDECL main(int argc, char *argv[])
     else
         perror("getcwd() error");
 
-
-    void* buf = malloc(2);
-    ((char*)buf)[0] = '7';
-    ((char*)buf)[1] = 'b';
     /* Initialize the enclave */
     if(initialize_enclave() < 0){
         printf("Enter a character before exit ...\n");
@@ -760,18 +694,19 @@ int SGX_CDECL main(int argc, char *argv[])
         printf("fatal error\n");
         exit(1);
     }
-    cout << "oi"<< endl;
-    free(buf);
+    cout << "sgx initiated sucessfuly"<< endl;
+
     for(int i = 0; i < noUsers; i++) {
         Register(logins[i], passwords[i]);
         assert(Login(logins[i], passwords[i]));
     }
 
-    /* Destroy the enclave */
     if(VC>1) {
         thread t(dumpLog);
         t.join();
     }
+
+    /* Destroy the enclave */
 
     sgx_destroy_enclave(global_eid);
 

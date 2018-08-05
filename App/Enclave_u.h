@@ -26,9 +26,9 @@ int SGX_UBRIDGE(SGX_CDECL, sgx_thread_setwait_untrusted_events_ocall, (const voi
 int SGX_UBRIDGE(SGX_CDECL, sgx_thread_set_multiple_untrusted_events_ocall, (const void** waiters, size_t total));
 
 sgx_status_t ecall_init(sgx_enclave_id_t eid);
-sgx_status_t ecall_encLOG(sgx_enclave_id_t eid, char* buffer, size_t len);
+sgx_status_t ecall_encLOG(sgx_enclave_id_t eid);
 sgx_status_t ecall_newHMAC(sgx_enclave_id_t eid);
-sgx_status_t ecall_hmac_this(sgx_enclave_id_t eid, char** retval, char* buffer, size_t len);
+sgx_status_t ecall_hmac_this(sgx_enclave_id_t eid, char** retval, int code, char* u, size_t len);
 
 #ifdef __cplusplus
 }

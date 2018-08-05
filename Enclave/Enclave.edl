@@ -10,9 +10,11 @@ enclave {
 
     trusted {
     		public void ecall_init();
-    		public void ecall_encLOG([in, size=len] char* buffer, size_t len);
+    		public void ecall_encLOG();
     		public void ecall_newHMAC();
-            public char * ecall_hmac_this([in, size=len] char* buffer, size_t len);
+
+    		//3 operations, find (0), insert(1), delete(2)
+            public char * ecall_hmac_this(int code, [in, size=len] char* u, size_t len);
         };
 
     /*
@@ -24,7 +26,6 @@ enclave {
         void ocall_print_string([in, string] const char *str);
         void ocall_save_dbpw([in, string] const char *str);
         void ocall_save_users([in, string] const char *str);
-
     };
 
 };

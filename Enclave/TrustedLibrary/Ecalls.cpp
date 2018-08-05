@@ -50,6 +50,7 @@
 #include <sodium.h>
 #include <Enclave_t.h>
 #include <random>
+#include <cstring>
 #include "../Enclave.h"
 #include "Enclave_t.h"
 #include "sgx_trts.h"
@@ -60,17 +61,20 @@ int DBPW_len;
 unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
 const int noUsers = 5;
-string sep;
+const char *sep;
 char * sha1_key;
 unordered_set<string> users;
+vector<vector<string>> logV2;
 
 char* MAPtoByteA(map<string, string> m){
+    printf("Database\n");
 
     int countBytes = 0;
     for( const auto& sm_pair : m ) {
         string entry =  sm_pair.first;
         string value = sm_pair.second;
         countBytes += entry.size() + value.size() + 2;
+        printf("%s:%s", entry.c_str(), value.c_str());
     }
     char *result = static_cast<char *>(malloc(countBytes + 1));
 
@@ -103,35 +107,6 @@ char* MAPtoByteA(map<string, string> m){
     return result;
 }
 
-vector<vector<string>> ByteAtoVAA( char* byteA){
-    vector<vector<string>> result;
-    int i = 0;
-    while(byteA[i] != ' ') {
-        vector<string> toAdd;
-        char op = byteA [i];
-        toAdd.push_back(string(1,op));
-        i+=2;
-        string a = "";
-        for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += byteA[j];
-
-        toAdd.push_back(a); i++;
-        a = "";
-        for(int j = i; byteA [j] != '^'; j++, i++ )
-            a += byteA[j];
-
-        toAdd.push_back(a); i++;
-        a= "";
-        if(op == '1' || op == '2') {
-            for (int j = i; byteA[j] != '~'; j++, i++)
-                a += byteA[j];
-            toAdd.push_back(a); i++;
-        }
-        i++;
-        result.push_back(toAdd);
-    }
-    return result;
-}
 string applyFunction(string username, string password){
     string c, result = "";
     c.append(username);
@@ -149,50 +124,24 @@ string applyFunction(string username, string password){
     return result;
 }
 
+void ecall_encLOG() {
 
-
-
-
-
-
-void ecall_encLOG(char *log, size_t len) {
     //turn back to vector<vector<string>> and put it to the unciphered database map string database
     int i = 0;
-    while (log[i] != ' ' && i < len) {
-        vector<string> toAdd;
-        char op = log[i];
-        toAdd.push_back(string(1, op));
-        i += 2;
-        string a;
-        while( log[i] != '^')
-            a += log[i++];
+    printf("LOG SIZE %i\n", logV2.size());
+    for( int i = 0; i < logV2.size(); i++ ) {
+        char code = logV2[i][0].at(0);
+        printf("gogogo %c \n", code);
 
-        toAdd.push_back(a);
-        i++;
-        a="";
+        if(code == '1') {
+            decDBPW.insert(pair<string, string>(logV2[i][1], logV2[i][2]));
+            printf("%s:%s", logV2[i][1].c_str(), logV2[i][2].c_str());
 
-        while( log[i] != '^')
-            a += log[i++];
-
-        toAdd.push_back(a);
-        i++;
-        a = "";
-        if (op == '1' || op == '2') {
-            for (int j = i; log[j] != '~'; j++, i++)
-                a += log[j];
-            toAdd.push_back(a);
-            i++;
-            decDBPW.erase(toAdd[1]);
-            decDBPW.insert(pair<string, string>(toAdd[1], toAdd[3]));
         }
-        else
-            if(op == '0')
-                decDBPW.insert(pair<string, string>(toAdd[1], toAdd[2]));
-            else
-                decDBPW.erase(toAdd[1]);
-        i++;
+        if(code == '2')
+            decDBPW.erase(logV2[i][1]);
     }
-
+    logV2.clear();
     //now turn it to char array before encryptying it back
     const unsigned char *result = reinterpret_cast<const unsigned char *>(MAPtoByteA(decDBPW));
 
@@ -202,9 +151,9 @@ void ecall_encLOG(char *log, size_t len) {
             sgx_status_t ret = SGX_ERROR_UNEXPECTED;
 
     crypto_secretbox_easy(out, result, DBPW_len, nonce, key_);
-   /* for(int i = 0; i < crypto_secretbox_MACBYTES + no; i++)
+    for(int i = 0; i < crypto_secretbox_MACBYTES + DBPW_len; i++)
         printf("%c", out[i]);
-    printf("\n");*/
+    printf("\n");
 
 
    ocall_save_dbpw(reinterpret_cast<const char *>(out));
@@ -251,21 +200,25 @@ void ecall_newHMAC(){
         resultHmac[i++] = '~';
     }
 
-    printf("With the new key: \n");
-    for ( auto it = users.begin(); it != users.end(); ++it )
-       printf("%s:", *it);
-    printf("\n");
-
-        printf("%s:\n", resultHmac);
-
-
     ocall_save_users(reinterpret_cast<const char *>(resultHmac));
-
 }
 
-char * ecall_hmac_this(char *u, size_t len) {
+char * ecall_hmac_this(int code, char *u, size_t len) {
+    char *b = strtok(u, sep);
+    char *a = b;
+    b = strtok(NULL, sep);
+
+    vector<string> toAdd;
+    switch(code){
+        case 0:  break;
+        case 1:  toAdd.push_back("1"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd); break;
+        case 2:  toAdd.push_back("2"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd); break;
+        default: printf("this should not have happened");
+    }
     string c;
-    c.append(u);
+
+    c.append(a); c.append(sep); c.append(b);
+
     string result = "";
 
     int len_ = c.size();
@@ -278,19 +231,24 @@ char * ecall_hmac_this(char *u, size_t len) {
 
     for(int i = 0; i < in_len ; i++)
         result+= out[i];
+   // printf("enclave: %s (code: %i) \n", result, code);
 
-   // printf("enclave: %s\n", result);
     return const_cast<char *>(result.c_str());
 }
 
 //E-call used by condifion_variable demo - loader thread
 void ecall_init(){
-    printf("ola\n");
-
+    sep = "%|00%";
     DBPW_len = 0;
     printf("hello enclave world\n");
-    ecall_newHMAC();
-}
+
+    sha1_key = static_cast<char *>(malloc(8));
+    for(int i = 0; i < 8; i ++) {
+        uint8_t val;
+        sgx_read_rand((unsigned char *) &val, 1);
+        val = val % 127;
+        sha1_key[i] = (char) val;
+    }}
 
 
 
