@@ -25,7 +25,7 @@ enclave {
     untrusted {
         void ocall_print_string([in, string] const char *str);
         void ocall_save_dbpw([in, string] const char *str);
-        void ocall_save_users([in, string] const char *str);
+        void ocall_save_users([in, string] const char * str);
     };
 
 };

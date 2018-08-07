@@ -53,6 +53,7 @@
 #include <cstring>
 #include "../Enclave.h"
 #include "Enclave_t.h"
+#include <list>
 #include "sgx_trts.h"
 
 using namespace std;
@@ -60,28 +61,57 @@ map<string, string> decDBPW;
 int DBPW_len;
 unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
-const int noUsers = 5;
 const char *sep;
 char * sha1_key;
-unordered_set<string> users;
+//unordered_set<char *> users;
 vector<vector<string>> logV2;
 
+void gen_new_key(){
+    sha1_key = static_cast<char *>(malloc(8));
+    for(int i = 0; i < 8; i ++) {
+        uint8_t val;
+        sgx_read_rand((unsigned char *) &val, 1);
+        val = val % 127;
+        sha1_key[i] = (char) val;
+    }
+}
+
+
+string applyFunction(char* username, char* password){
+    string c, result = "";
+    c.append(username);
+    c.append(sep);
+    c.append(password);
+    int len = c.size();
+    unsigned char out[len];
+    unsigned char in[len];
+    unsigned long long in_len = 8;
+    for(int i = 0; i < len; i ++ )
+        in[i] = (unsigned char) c.at(i);
+    crypto_auth_hmacsha256(out, in, in_len, reinterpret_cast<const unsigned char *>(sha1_key));
+    for(int i = 0; i < in_len ; i++)
+        result+=out[i];
+    return result;
+}
+
+
 char* MAPtoByteA(map<string, string> m){
-    printf("Database\n");
+    map<string, string>::iterator it = decDBPW.begin();
 
     int countBytes = 0;
-    for( const auto& sm_pair : m ) {
-        string entry =  sm_pair.first;
-        string value = sm_pair.second;
+    for (it=decDBPW.begin(); it!=decDBPW.end(); ++it){
+        string entry =  it->first;
+        string value = it->second;
         countBytes += entry.size() + value.size() + 2;
-        printf("%s:%s", entry.c_str(), value.c_str());
+       // printf("pass %s \n", value.c_str());
     }
     char *result = static_cast<char *>(malloc(countBytes + 1));
 
     int counter = 0;
-    for( const auto& sm_pair : m ){
-        string entry =  sm_pair.first;
-        string value = sm_pair.second;
+    it = m.begin();
+    for (it=m.begin(); it!=m.end(); ++it){
+        string entry =  it->first;
+        string value = it->second;
         const int totalSize = entry.size() + value.size() + 2;
         char *baites = static_cast<char *>(malloc(totalSize));
         for(int i = 0; i < entry.size() ; i ++)
@@ -107,41 +137,36 @@ char* MAPtoByteA(map<string, string> m){
     return result;
 }
 
-string applyFunction(string username, string password){
-    string c, result = "";
-    c.append(username);
-    c.append(sep);
-    c.append(password);
-    int len = c.size();
-    unsigned char out[len];
-    unsigned char in[len];
-    unsigned long long in_len = len;
-    for(int i = 0; i < len; i ++ )
-        in[i] = (unsigned char) c.at(i);
-    crypto_auth_hmacsha256(out, in, in_len, reinterpret_cast<const unsigned char *>(sha1_key));
-    for(int i = 0; i < in_len ; i++)
-        result+=out[i];
-    return result;
-}
 
 void ecall_encLOG() {
+    map<string, string> dec;
 
     //turn back to vector<vector<string>> and put it to the unciphered database map string database
     int i = 0;
-    printf("LOG SIZE %i\n", logV2.size());
     for( int i = 0; i < logV2.size(); i++ ) {
-        char code = logV2[i][0].at(0);
-        printf("gogogo %c \n", code);
+      //  printf("logv2 %s: %s\n", logV2[i][1].c_str(), logV2[i][2].c_str());
+        //char *
+
+        char code = logV2[i][0][0];
 
         if(code == '1') {
             decDBPW.insert(pair<string, string>(logV2[i][1], logV2[i][2]));
-            printf("%s:%s", logV2[i][1].c_str(), logV2[i][2].c_str());
+           // printf("pass %s\n", logV2[i][2]);
+        }
+
+        if(code == '2') {
+            decDBPW.erase(logV2[i][1]);
+            printf("erade %s\n");
 
         }
-        if(code == '2')
-            decDBPW.erase(logV2[i][1]);
     }
     logV2.clear();
+
+   // map<string, string>::iterator it = decDBPW.begin();
+   // for (it=decDBPW.begin(); it!=decDBPW.end(); ++it)
+     //   printf( "%s  << << %s << '\n",it->first.c_str(), it->second.c_str() ) ;
+
+
     //now turn it to char array before encryptying it back
     const unsigned char *result = reinterpret_cast<const unsigned char *>(MAPtoByteA(decDBPW));
 
@@ -151,10 +176,6 @@ void ecall_encLOG() {
             sgx_status_t ret = SGX_ERROR_UNEXPECTED;
 
     crypto_secretbox_easy(out, result, DBPW_len, nonce, key_);
-    for(int i = 0; i < crypto_secretbox_MACBYTES + DBPW_len; i++)
-        printf("%c", out[i]);
-    printf("\n");
-
 
    ocall_save_dbpw(reinterpret_cast<const char *>(out));
 
@@ -172,69 +193,59 @@ void ecall_encLOG() {
 }
 
 void ecall_newHMAC(){
+    gen_new_key();
+    //users.clear();
 
-    sha1_key = static_cast<char *>(malloc(8));
-    for(int i = 0; i < 8; i ++) {
-        uint8_t val;
-        sgx_read_rand((unsigned char *) &val, 1);
-        val = val % 127;
-        sha1_key[i] = (char) val;
-    }
-    users.clear();
+    /*char * * r = static_cast<char **>(malloc(decDBPW.size()));
+    for(int i = 0; i < decDBPW.size(); i++)
+        r[i] = static_cast<char *>(malloc(8));*/
+    //char * re = static_cast<char *>(malloc(decDBPW.size()));
+    int k = 0;
+
     int elems = 0;
-    int countB = 0;
-    for( const auto& sm_pair : decDBPW ) {
-        elems++;
-        string entry = sm_pair.first;
-        string value = sm_pair.second;
-        users.insert(applyFunction(entry, value));
-        countB+= entry.length() + value.length();
+    vector<string> strings(decDBPW.size());
+    map<string, string>::iterator it = decDBPW.begin();
+    for (it=decDBPW.begin(); it!=decDBPW.end(); ++it){
+        string entry = it->first;
+        string value = it->second;
+        string elem = applyFunction(const_cast<char *>(entry.c_str()), const_cast<char *>(value.c_str()));
+        printf("%s\n", elem);
+        strings[elems++] = elem;
+      //  r[elems] = const_cast<char *>(elem.c_str());
+      //  elems++;
+    //    for(int i = 0; i < 8; i++)
+      //       re[k++] = elem.at(i);
     }
-    int size = countB + elems;
-    char * resultHmac = static_cast<char *>(malloc(size));
-    int i = 0;
-    for ( auto it = users.begin(); it != users.end(); ++it )
-    {
-        for(const char & b : *it)
-            resultHmac[i++] = b;
-        resultHmac[i++] = '~';
-    }
+    char re[decDBPW.size()*8];
+    for(int i = 0; i < decDBPW.size(); i ++)
+        for (int j = 0; j < 8; j++)
+            re[(i*8)+j] = strings[i].at(j);
 
-    ocall_save_users(reinterpret_cast<const char *>(resultHmac));
+    for(int i = 0; i < decDBPW.size(); i ++)
+        printf("string: %s ||| re: %s\n", strings[i].c_str(), re);
+
+    ocall_save_users(re);
 }
 
 char * ecall_hmac_this(int code, char *u, size_t len) {
+
     char *b = strtok(u, sep);
     char *a = b;
     b = strtok(NULL, sep);
 
-    vector<string> toAdd;
-    switch(code){
-        case 0:  break;
-        case 1:  toAdd.push_back("1"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd); break;
-        case 2:  toAdd.push_back("2"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd); break;
-        default: printf("this should not have happened");
+    if(code == 1){
+        vector<string> toAdd;
+        toAdd.push_back("1"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd);
     }
-    string c;
 
-    c.append(a); c.append(sep); c.append(b);
+    if(code == 2){
+        vector<string> toAdd;
+        toAdd.push_back("2"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd);
+    }
 
-    string result = "";
-
-    int len_ = c.size();
-    unsigned char out[len_];
-    unsigned char in[len_];
-    unsigned long long in_len = len_;
-    for(int i = 0; i < len_; i ++ )
-        in[i] = (unsigned char) c.at(i);
-    crypto_auth_hmacsha256(out, in, in_len, reinterpret_cast<const unsigned char *>(sha1_key));
-
-    for(int i = 0; i < in_len ; i++)
-        result+= out[i];
-   // printf("enclave: %s (code: %i) \n", result, code);
-
-    return const_cast<char *>(result.c_str());
+    return const_cast<char *>(applyFunction(a, b).c_str());
 }
+
 
 //E-call used by condifion_variable demo - loader thread
 void ecall_init(){
@@ -242,13 +253,8 @@ void ecall_init(){
     DBPW_len = 0;
     printf("hello enclave world\n");
 
-    sha1_key = static_cast<char *>(malloc(8));
-    for(int i = 0; i < 8; i ++) {
-        uint8_t val;
-        sgx_read_rand((unsigned char *) &val, 1);
-        val = val % 127;
-        sha1_key[i] = (char) val;
-    }}
+    gen_new_key();
+}
 
 
 

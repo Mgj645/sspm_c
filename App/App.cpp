@@ -61,7 +61,6 @@ using namespace std;
 unordered_set<string> users;
 unordered_set<string> usernames;
 
-string sha1_key(8, '\0');
 vector<vector<string>> logV2;
 mutex logTEX;
 const int dumpTIME = 3;
@@ -70,7 +69,7 @@ unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
 string sep;
 int no;
-
+bool checkLogin = 0;
 /*                      *
  *                      *
  *                      *
@@ -278,26 +277,51 @@ void ocall_save_dbpw(const char * str) {
     myfile.close();
 }
 
-void ocall_save_users(const char * users_) {
-    users.clear();
+void testlogin();
+
+void ocall_save_users(const char *  users_) {
+
+
+
+
+  int i = 0;
+    while(users_[i] != '\0') {
+        i++;
+    }
+
+    cout << "got " << i << " " << users_ << endl;
+
     string r = "";
-    int i = 0;
-    cout << "new key bitches: " << endl;
-    while(users_[i] != '\0'){
+
+    users.clear();
+    cout << "users size" << users.size() << endl;
+   /* while(users_[i] != '\0'){
         if(users_[i] == '~') {
             users.insert(r);
-            cout << r << endl;
-
             r="";
         }
         else{
             r+=users_[i];}
         i++;
+    }*/
+
+
+    i = 0;
+    int k = 0;
+    while(users_[i*8+1] != '\0') {
+        for(int j = 0; j < 8; j++ )
+            r+=users_[j+(i*8)];
+        i++;
+        users.insert(r);
+        cout << r << endl;
+        r="";
     }
-    cout << "done" << endl;
+    cout << "users size" << users.size() << endl;
 
 
+        checkLogin = 1;
 }
+
 
 /*                      *
  *                      *
@@ -316,11 +340,14 @@ char * check_hmac_sgx(int code, string username, string password){
 
     int len = username.length() + password.length() + sep.length();
     string a; a.append(username); a.append(sep); a.append(password);
+   // cout << "APP LOGIN input: " << a <<  " len: " << len << endl;
 
-    char ** result = static_cast<char **>(malloc(len));
+    char ** result = static_cast<char **>(malloc(len *2));
     ecall_hmac_this(global_eid, result, code, const_cast<char *>(a.c_str()), len);
+
     return *result;
 }
+
 
 bool RegisterV0(string username, string password){
     if (users.find(check_hmac_sgx(0, username, password)) == users.end()){
@@ -414,12 +441,9 @@ bool deleteUserV1(string username, string password){
 bool RegisterV2(string username, string password){
     if (usernames.find(username) == usernames.end()){
         usernames.insert(username);
-        users.insert(check_hmac_sgx(1, username, password));
-        vector<string> toAdd;
-        toAdd.push_back("0"); toAdd.push_back(username); toAdd.push_back(password);
-        logTEX.try_lock();
-        logV2.push_back(toAdd);
-        logTEX.unlock();
+        char* r = check_hmac_sgx(1, username, password);
+        cout << "App_ register: " << r << endl;
+        users.insert(r);
         return true;
     }
     else{
@@ -479,43 +503,6 @@ bool deleteUserV2(string username, string password){
     }
 }
 
-char * VVStoByteA(vector<vector<string>> m){
-    int countBytes = 0;
-    for( int i = 0; i < m.size(); i++ ) {
-            int n = m[i][0].at(0); //check how many strings does a entry have
-            countBytes += 1 + 1;
-            countBytes += m[i][1].size() + 1;
-            countBytes += m[i][2].size() + 1;
-            if( n  == 1 || n == 2) {
-                countBytes += m.size() + 1;
-            }
-            countBytes++;
-        }
-        no = countBytes;
-
-    char *result = static_cast<char *>(malloc(countBytes + 1));
-    int counter = 0;
-
-    for( int i = 0; i < m.size(); i++ ) {
-        int n = m[i][0].at(0); //check how many strings does a entry have
-        result[counter++] = n; result[counter++] = '^';
-            for(int j = 0; j < m[i][1].size() ; j ++)
-                result[counter++] = m[i][1].at(j);
-            result[counter++] = '^';
-            for(int j = 0; j < m[i][2].size() ; j ++)
-                result[counter++] = m[i][2].at(j);
-                result[counter++] = '^';
-            if( n  == 1 || n == 2) {
-                string p_ = m[i][3];
-                for(int j = 0; j < p_.size() ; j ++)
-                    result[counter++] = p_.at(j);
-            }
-        result[counter++] = '~';
-    }
-    result[counter] = ' ';
-    no = countBytes + 1;
-    return result;
-}
 
 char* MAPtoByteA(map<string, string> m){
     int countBytes = 0;
@@ -556,47 +543,24 @@ char* MAPtoByteA(map<string, string> m){
 
 void dumpLog() {
     while(2+2==4) {
-        sleep(dumpTIME);
-        cout << "log changes" << endl;
+
+        if(checkLogin)
+            testlogin();
             ecall_encLOG(global_eid);
 
-
-           // vector<vector<string>> vaites = ByteAtoVAA(caites);
-            logTEX.try_lock();
-
-            logV2.clear();
-            logTEX.unlock();
-
-
-
-
-        ecall_newHMAC(global_eid);
+            ecall_newHMAC(global_eid);
+        sleep(dumpTIME);
 
     }
-}
-
-int sspm(const int version) {
-    std::random_device rd;
-    std::mt19937_64 gen{std::random_device{}()};
-    std::uniform_int_distribution<short> dist{'a', 'z'};
-
-    for(auto& c: sha1_key)
-        c = dist(gen);
-
-    VC = version;
-
-    if(VC > 1){
-        thread t(dumpLog);
-        t.join();
-        cout << "Ended Initialization" << endl;
-    }
-    return 0;
 }
 
 bool Login(string username, string password) {
+
     char * result = check_hmac_sgx(0, username, password);
-  //cout << "APP: " << result << endl;
-    return !(users.find(result) == users.end());
+    cout << "APP: " << result << endl;
+    std::unordered_set<std::string>::const_iterator got = users.find (result);
+    bool r = !(got == users.end());
+    return r;
 }
 
 bool Register(string username, string password){
@@ -665,6 +629,15 @@ void simulateUsers() {
     else cout << "Unable to open file";
 }
 
+
+void testlogin() {
+    checkLogin = 0;
+    for(int i = 0; i < noUsers; i++) {
+        cout << Login(logins[i], passwords[i]) << endl;
+    }
+}
+
+
 /* Application entry */
 int SGX_CDECL main(int argc, char *argv[])
 {
@@ -698,8 +671,8 @@ int SGX_CDECL main(int argc, char *argv[])
 
     for(int i = 0; i < noUsers; i++) {
         Register(logins[i], passwords[i]);
-        assert(Login(logins[i], passwords[i]));
-    }
+        cout << Login(logins[i], passwords[i]) << endl;
+ }
 
     if(VC>1) {
         thread t(dumpLog);
