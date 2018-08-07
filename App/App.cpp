@@ -67,7 +67,7 @@ const int dumpTIME = 3;
 int VC;
 unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
-string sep;
+string sep, sep2;
 int no;
 bool checkLogin = 0;
 /*                      *
@@ -289,34 +289,24 @@ void ocall_save_users(const char *  users_) {
         i++;
     }
 
-    cout << "got " << i << " " << users_ << endl;
+   // cout << "got " << i << " " << users_ << endl;
 
     string r = "";
 
     users.clear();
-    cout << "users size" << users.size() << endl;
-   /* while(users_[i] != '\0'){
-        if(users_[i] == '~') {
-            users.insert(r);
-            r="";
-        }
-        else{
-            r+=users_[i];}
-        i++;
-    }*/
-
+    //cout << "users size" << users.size() << endl;
 
     i = 0;
     int k = 0;
     while(users_[i*8+1] != '\0') {
-        for(int j = 0; j < 8; j++ )
+        for(int j = 0; j < 8 ; j++ )
             r+=users_[j+(i*8)];
         i++;
         users.insert(r);
         cout << r << endl;
         r="";
     }
-    cout << "users size" << users.size() << endl;
+    //cout << "users size" << users.size() << endl;
 
 
         checkLogin = 1;
@@ -338,11 +328,11 @@ void ocall_save_users(const char *  users_) {
 
 char * check_hmac_sgx(int code, string username, string password){
 
-    int len = username.length() + password.length() + sep.length();
+    int len = username.length() + password.length() + sep.length() ;
     string a; a.append(username); a.append(sep); a.append(password);
    // cout << "APP LOGIN input: " << a <<  " len: " << len << endl;
 
-    char ** result = static_cast<char **>(malloc(len *2));
+    char ** result = static_cast<char **>(malloc(len));
     ecall_hmac_this(global_eid, result, code, const_cast<char *>(a.c_str()), len);
 
     return *result;
@@ -441,9 +431,7 @@ bool deleteUserV1(string username, string password){
 bool RegisterV2(string username, string password){
     if (usernames.find(username) == usernames.end()){
         usernames.insert(username);
-        char* r = check_hmac_sgx(1, username, password);
-        cout << "App_ register: " << r << endl;
-        users.insert(r);
+        users.insert(check_hmac_sgx(1, username, password));
         return true;
     }
     else{
@@ -459,11 +447,6 @@ bool changePasswordV2(string username, string password1, string password2){
         users.erase(check_hmac_sgx(2, username, password1));
         users.insert(check_hmac_sgx(1, username, password2));
 
-        vector<string> toAdd;
-        toAdd.push_back("1"); toAdd.push_back(username); toAdd.push_back(password1); toAdd.push_back(password2);
-        logTEX.try_lock();
-        logV2.push_back(toAdd);
-        logTEX.unlock();
         return true;
     }
 }
@@ -478,11 +461,6 @@ bool changeUsernameV2(string username1, string password, string username2){
         users.erase(check_hmac_sgx(2, username1, password));
         users.insert(check_hmac_sgx(1, username2, password));
 
-        vector<string> toAdd;
-        toAdd.push_back("2"); toAdd.push_back(username1); toAdd.push_back(username2); toAdd.push_back(password);
-        logTEX.try_lock();
-        logV2.push_back(toAdd);
-        logTEX.unlock();
         return true;
     }
 }
@@ -494,11 +472,6 @@ bool deleteUserV2(string username, string password){
     else{
         users.erase(check_hmac_sgx(2, username, password));
         usernames.erase(username);
-        vector<string> toAdd;
-        toAdd.push_back("3"); toAdd.push_back(username); toAdd.push_back(password);
-        logTEX.try_lock();
-        logV2.push_back(toAdd);
-        logTEX.unlock();
         return true;
     }
 }
@@ -543,24 +516,20 @@ char* MAPtoByteA(map<string, string> m){
 
 void dumpLog() {
     while(2+2==4) {
-
         if(checkLogin)
             testlogin();
             ecall_encLOG(global_eid);
-
             ecall_newHMAC(global_eid);
         sleep(dumpTIME);
-
     }
 }
 
 bool Login(string username, string password) {
 
     char * result = check_hmac_sgx(0, username, password);
-    cout << "APP: " << result << endl;
+    //cout << "APP: " << result << endl;
     std::unordered_set<std::string>::const_iterator got = users.find (result);
-    bool r = !(got == users.end());
-    return r;
+    return !(got == users.end());
 }
 
 bool Register(string username, string password){
@@ -642,6 +611,7 @@ void testlogin() {
 int SGX_CDECL main(int argc, char *argv[])
 {
     sep = "%|00%";
+    sep2 = "%|%";
 
 
     (void)(argc);

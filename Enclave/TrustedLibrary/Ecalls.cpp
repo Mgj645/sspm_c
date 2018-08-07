@@ -61,7 +61,7 @@ map<string, string> decDBPW;
 int DBPW_len;
 unsigned char key_[crypto_auth_hmacsha256_KEYBYTES];
 unsigned char nonce[crypto_secretbox_NONCEBYTES];
-const char *sep;
+const char *sep, *sep2;
 char * sha1_key;
 //unordered_set<char *> users;
 vector<vector<string>> logV2;
@@ -209,28 +209,29 @@ void ecall_newHMAC(){
         string entry = it->first;
         string value = it->second;
         string elem = applyFunction(const_cast<char *>(entry.c_str()), const_cast<char *>(value.c_str()));
-        printf("%s\n", elem);
+        //printf("%s\n", elem);
         strings[elems++] = elem;
-      //  r[elems] = const_cast<char *>(elem.c_str());
-      //  elems++;
-    //    for(int i = 0; i < 8; i++)
-      //       re[k++] = elem.at(i);
     }
     char re[decDBPW.size()*8];
     for(int i = 0; i < decDBPW.size(); i ++)
         for (int j = 0; j < 8; j++)
             re[(i*8)+j] = strings[i].at(j);
 
-    for(int i = 0; i < decDBPW.size(); i ++)
-        printf("string: %s ||| re: %s\n", strings[i].c_str(), re);
+   // for(int i = 0; i < decDBPW.size(); i ++)
+    //    printf("string: %s ||| re: %s\n", strings[i].c_str(), re);
 
     ocall_save_users(re);
 }
 
 char * ecall_hmac_this(int code, char *u, size_t len) {
+    string aaa = string(u,len);
 
+    int k = 0;
+    u = const_cast<char *>(aaa.c_str());
     char *b = strtok(u, sep);
     char *a = b;
+    printf("login0 %i:%s:%s\n", len, a,b);
+
     b = strtok(NULL, sep);
 
     if(code == 1){
@@ -242,14 +243,18 @@ char * ecall_hmac_this(int code, char *u, size_t len) {
         vector<string> toAdd;
         toAdd.push_back("2"); toAdd.push_back(a); toAdd.push_back(b);  logV2.push_back(toAdd);
     }
+    printf("login1 %i:%s:%s\n", len, a,b);
 
     return const_cast<char *>(applyFunction(a, b).c_str());
+
 }
 
 
 //E-call used by condifion_variable demo - loader thread
 void ecall_init(){
     sep = "%|00%";
+    sep2 = "%|%";
+
     DBPW_len = 0;
     printf("hello enclave world\n");
 
