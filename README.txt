@@ -1,26 +1,6 @@
------------------------
-Purpose of Cxx11SGXDemo
------------------------
+1- Install the SGX SDK by Intel (available in https://github.com/intel/linux-sgx
+2- Install libsodium-sgx in your computer (you can see how to in the readme of this page https://github.com/sgtpepperpt/BISEN/tree/master/libsodium-bisen/libsodium-sgx)
 
-The project demonstrates serveral C++11 features inside the Enclave:
-- lambda expressions;
-- rvalue references and move semantics;
-- automatic type deduction with auto and decltype;
-- nullptr type;
-- strongly typed enum classes;
-- Range-based for statements;
-- static_assert keyword for compile-time assertion;
-- initializer lists and uniform initialization syntax;
-- New virtual function controls: override, final, default, and delete;
-- delegating constructors;
-- new container classes (unordered_set, unordered_map, unordered_multiset, and unordered_multimap);
-- tuple class;
-- function object wrapper;
-- atomic, mutexes, condition_variables;
-- new smart pointer classes: shared_ptr, unique_ptr;
-- new c++ algorithms: all_of, any_of, none_of;
-- variadic templates;
-- SFINAE;
 
 ---------------------------------------------
 How to Build/Execute the C++11 sample program
